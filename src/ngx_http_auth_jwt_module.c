@@ -26,7 +26,7 @@ typedef struct
 {
   ngx_str_t loginurl;
   ngx_str_t key;
-  ngx_flag_t enabled;
+  ngx_str_t enabled_var;
   ngx_flag_t redirect;
   ngx_str_t jwt_location;
   ngx_str_t algorithm;
@@ -83,10 +83,10 @@ static ngx_command_t auth_jwt_directives[] = {
      NULL},
 
     {ngx_string("auth_jwt_enabled"),
-     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_FLAG,
-     ngx_conf_set_flag_slot,
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+     ngx_conf_set_str_slot,
      NGX_HTTP_LOC_CONF_OFFSET,
-     offsetof(auth_jwt_conf_t, enabled),
+     offsetof(auth_jwt_conf_t, enabled_var),
      NULL},
 
     {ngx_string("auth_jwt_redirect"),
@@ -207,15 +207,14 @@ static void *create_conf(ngx_conf_t *cf)
   else
   {
     // ngx_str_t fields are initialized by the ngx_palloc call above -- only need to init flags and arrays here
-    conf->enabled = NGX_CONF_UNSET;
-    conf->redirect = NGX_CONF_UNSET;
-    conf->validate_sub = NGX_CONF_UNSET;
     conf->redirect = NGX_CONF_UNSET;
     conf->validate_sub = NGX_CONF_UNSET;
     conf->extract_var_claims = NULL;
     conf->extract_request_claims = NULL;
     conf->extract_response_claims = NULL;
     conf->use_keyfile = NGX_CONF_UNSET;
+    conf->enabled_var.len = 0;
+    conf->enabled_var.data = NULL;
 
     return conf;
   }
@@ -236,20 +235,9 @@ static char *merge_conf(ngx_conf_t *cf, void *parent, void *child)
   merge_array(cf->pool, &conf->extract_request_claims, prev->extract_request_claims, sizeof(ngx_str_t));
   merge_array(cf->pool, &conf->extract_response_claims, prev->extract_response_claims, sizeof(ngx_str_t));
 
-  if (conf->enabled == NGX_CONF_UNSET)
-  {
-    conf->enabled = prev->enabled == NGX_CONF_UNSET ? 0 : prev->enabled;
-  }
-
-  if (conf->redirect == NGX_CONF_UNSET)
-  {
-    conf->redirect = prev->redirect == NGX_CONF_UNSET ? 0 : prev->redirect;
-  }
-
-  if (conf->use_keyfile == NGX_CONF_UNSET)
-  {
-    conf->use_keyfile = prev->use_keyfile == NGX_CONF_UNSET ? 0 : prev->use_keyfile;
-  }
+  ngx_conf_merge_str_value(conf->enabled_var, prev->enabled_var, "on");
+  ngx_conf_merge_off_value(conf->redirect, prev->redirect, 0);
+  ngx_conf_merge_off_value(conf->use_keyfile, prev->use_keyfile, 0);
 
   // If the usage of the keyfile is specified, check if the key_path is also configured
   if (conf->use_keyfile == 1)
@@ -461,7 +449,19 @@ static auth_jwt_ctx_t *get_request_jwt_ctx(ngx_http_request_t *r)
 {
   auth_jwt_conf_t *jwtcf = ngx_http_get_module_loc_conf(r, ngx_http_auth_jwt_module);
 
-  if (!jwtcf->enabled)
+  ngx_int_t enabled = 1;
+  if (jwtcf->enabled_var.len > 0) {
+    ngx_int_t hash = ngx_hash_key(jwtcf->enabled_var.data, jwtcf->enabled_var.len);
+    ngx_http_variable_value_t *var = ngx_http_get_variable(r, &jwtcf->enabled_var, hash);
+    if (var && !var->not_found && var->valid && var->len > 0) {
+      if (ngx_strncmp(var->data, "off", 3) == 0) {
+        enabled = 0;
+      }
+    } else if (ngx_strncmp(jwtcf->enabled_var.data, "off", 3) == 0) {
+      enabled = 0;
+    }
+  }
+  if (!enabled)
   {
     return NULL;
   }
@@ -562,7 +562,19 @@ static ngx_int_t handle_request(ngx_http_request_t *r)
   auth_jwt_conf_t *jwtcf = ngx_http_get_module_loc_conf(r, ngx_http_auth_jwt_module);
   auth_jwt_ctx_t *ctx = get_request_jwt_ctx(r);
 
-  if (!jwtcf->enabled)
+  ngx_int_t enabled = 1;
+  if (jwtcf->enabled_var.len > 0) {
+    ngx_int_t hash = ngx_hash_key(jwtcf->enabled_var.data, jwtcf->enabled_var.len);
+    ngx_http_variable_value_t *var = ngx_http_get_variable(r, &jwtcf->enabled_var, hash);
+    if (var && !var->not_found && var->valid && var->len > 0) {
+      if (ngx_strncmp(var->data, "off", 3) == 0) {
+        enabled = 0;
+      }
+    } else if (ngx_strncmp(jwtcf->enabled_var.data, "off", 3) == 0) {
+      enabled = 0;
+    }
+  }
+  if (!enabled)
   {
     return NGX_DECLINED;
   }
