@@ -235,7 +235,7 @@ static char *merge_conf(ngx_conf_t *cf, void *parent, void *child)
   merge_array(cf->pool, &conf->extract_request_claims, prev->extract_request_claims, sizeof(ngx_str_t));
   merge_array(cf->pool, &conf->extract_response_claims, prev->extract_response_claims, sizeof(ngx_str_t));
 
-  ngx_conf_merge_str_value(conf->enabled_var, prev->enabled_var, "on");
+  ngx_conf_merge_str_value(conf->enabled_var, prev->enabled_var, "off");
   ngx_conf_merge_off_value(conf->redirect, prev->redirect, 0);
   ngx_conf_merge_off_value(conf->use_keyfile, prev->use_keyfile, 0);
 
