@@ -449,6 +449,11 @@ static auth_jwt_ctx_t *get_request_jwt_ctx(ngx_http_request_t *r)
 {
   auth_jwt_conf_t *jwtcf = ngx_http_get_module_loc_conf(r, ngx_http_auth_jwt_module);
 
+  // Only activate JWT logic if key or keyfile_path is set
+  if (jwtcf->key.len == 0 && jwtcf->keyfile_path.len == 0) {
+    return NULL;
+  }
+
   ngx_int_t enabled = 1;
   if (jwtcf->enabled_var != NULL) {
     ngx_str_t cv;
@@ -557,6 +562,12 @@ static auth_jwt_ctx_t *get_request_jwt_ctx(ngx_http_request_t *r)
 static ngx_int_t handle_request(ngx_http_request_t *r)
 {
   auth_jwt_conf_t *jwtcf = ngx_http_get_module_loc_conf(r, ngx_http_auth_jwt_module);
+
+  // Only activate JWT logic if key or keyfile_path is set
+  if (jwtcf->key.len == 0 && jwtcf->keyfile_path.len == 0) {
+    return NGX_DECLINED;
+  }
+
   auth_jwt_ctx_t *ctx = get_request_jwt_ctx(r);
 
   ngx_int_t enabled = 1;
